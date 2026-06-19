@@ -1,0 +1,15 @@
+# Node
+node_modules/
+backend/node_modules/
+
+# Environment / Secrets
+.env
+backend/.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
+backend/*.log

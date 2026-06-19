@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Notes scanner — Loupe</title>
+<meta name="description" content="Drop a photo of any handwritten page, whiteboard, or printed sheet. Loupe reads it and returns clean structured Markdown." />
+<meta name="theme-color" content="#F4F5F0" />
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" href="./icons/icon-192.png" />
+<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./css/styles.css" />
+<style>
+  /* ---- notes-specific ---- */
+  .notes-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .style-chips { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+  .chip {
+    border: 1.5px solid var(--line-strong);
+    background: transparent;
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ash);
+    cursor: pointer;
+  }
+  .chip.is-active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+  .upload-zone {
+    border: 1.5px dashed var(--line-strong);
+    border-radius: var(--radius-md);
+    padding: var(--space-5) var(--space-4);
+    text-align: center;
+    background: var(--paper-raised);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+  }
+  .upload-zone:hover,
+  .upload-zone.is-dragover { border-color: var(--safelight); background: var(--safelight-soft); }
+  .upload-zone h3 { font-size: 1.05rem; margin: 0; }
+  .upload-zone p  { color: var(--ash); font-size: 0.88rem; margin: 0; }
+
+  /* scan preview pane */
+  .scan-preview {
+    border: 1px solid var(--line-strong);
+    overflow: hidden;
+    background: #e8e9e3;
+    position: relative;
+    border-radius: var(--radius-sm);
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .scan-preview img { width: 100%; height: 100%; object-fit: contain; max-height: 420px; }
+  .scan-preview .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--safelight), transparent);
+    box-shadow: 0 0 14px 4px rgba(242,169,59,0.5);
+    top: 0;
+    display: none;
+  }
+  .scan-preview .scan-line.is-active {
+    display: block;
+    animation: scan-sweep 1.6s linear infinite;
+  }
+  @keyframes scan-sweep { 0% { top: 0; } 100% { top: calc(100% - 3px); } }
+
+  .preview-placeholder {
+    text-align: center;
+    color: var(--ash);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    padding: var(--space-5);
+  }
+
+  /* output doc */
+  .doc-output {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: var(--space-5);
+    min-height: 340px;
+    font-family: var(--font-body);
+    font-size: 0.97rem;
+    line-height: 1.7;
+    color: var(--ink);
+    position: relative;
+    overflow-y: auto;
+    max-height: 520px;
+  }
+  .doc-output.is-loading::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--paper-raised), var(--safelight), var(--paper-raised));
+    background-size: 200% 100%;
+    animation: shimmer-bar 1.2s linear infinite;
+  }
+  @keyframes shimmer-bar { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  .doc-output h2 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; margin: 1.2em 0 0.4em; }
+  .doc-output h2:first-child { margin-top: 0; }
+  .doc-output h3 { font-family: var(--font-display); font-size: 1rem; font-weight: 600; margin: 1em 0 0.3em; color: var(--ink-soft); }
+  .doc-output ul { margin: 0.4em 0 0.9em; padding-left: 1.4em; }
+  .doc-output li { margin-bottom: 0.3em; }
+  .doc-output p  { margin: 0 0 0.9em; }
+  .doc-output strong { font-weight: 700; }
+  .doc-output em { font-style: italic; }
+  .doc-output code { font-family: var(--font-mono); font-size: 0.87em; background: var(--paper); padding: 0.1em 0.35em; border-radius: 3px; border: 1px solid var(--line); }
+
+  .doc-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    gap: var(--space-3);
+    color: var(--ash);
+  }
+  .doc-placeholder p { font-family: var(--font-mono); font-size: 0.83rem; text-align: center; }
+
+  .typing-cursor::after {
+    content: '▌';
+    animation: blink 0.9s step-start infinite;
+    color: var(--safelight);
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .history-strip {
+    display: flex;
+    gap: var(--space-2);
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+    margin-bottom: var(--space-4);
+  }
+  .history-thumb {
+    flex-shrink: 0;
+    width: 56px;
+    height: 70px;
+    object-fit: cover;
+    border: 1.5px solid var(--line);
+    cursor: pointer;
+    opacity: 0.6;
+    border-radius: 2px;
+    transition: opacity 0.15s ease, border-color 0.15s ease;
+  }
+  .history-thumb.is-active,
+  .history-thumb:hover { opacity: 1; border-color: var(--ink); }
+
+  /* export */
+  .export-strip {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--line);
+    padding-top: var(--space-3);
+  }
+  .export-strip p { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ash); }
+
+  .word-count { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ash); display: none; }
+  .word-count.is-visible { display: block; }
+
+  .notes-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
+    align-items: start;
+  }
+  @media (max-width: 860px) { .notes-two-col { grid-template-columns: 1fr; } }
+</style>
+<!-- Novus.ai (Pendo) Integration -->
+<script>
+(function(apiKey){
+    (function(p,e,n,d,o){var v,w,x,y,z;o=p[d]=p[d]||{};o._q=o._q||[];
+    v=['initialize','identify','updateOptions','pageLoad','track', 'trackAgent'];for(w=0,x=v.length;w<x;++w)(function(m){
+    o[m]=o[m]||function(){o._q[m===v[0]?'unshift':'push']([m].concat([].slice.call(arguments,0)));};})(v[w]);
+    y=e.createElement(n);y.async=!0;y.src='https://cdn.pendo.io/agent/static/'+apiKey+'/pendo.js';
+    z=e.getElementsByTagName(n)[0];z.parentNode.insertBefore(y,z);})(window,document,'script','pendo');
+})('b33ac075-ed73-4cab-bfd7-be9c11e657e3');
+</script>
+<script>
+if (window.pendo) {
+  pendo.initialize({
+    visitor: {
+      id: ''
+    }
+  });
+}
+</script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="./index.html">
+      <svg class="brand-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="14" y="14" width="72" height="72" fill="none" stroke="#15171B" stroke-width="6"/>
+        <circle cx="48" cy="48" r="22" fill="none" stroke="#E14F3A" stroke-width="6"/>
+        <line x1="63" y1="63" x2="74" y2="74" stroke="#E14F3A" stroke-width="6" stroke-linecap="round"/>
+      </svg>
+      Loupe
+    </a>
+    <nav class="nav-links">
+      <a class="nav-link" href="./photos.html">Photo sort</a>
+      <a class="nav-link" href="./notes.html">Notes scanner</a>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <div class="tool-header">
+    <p class="eyebrow">ROLL B — 1 SHOT</p>
+    <h1>Notes scanner</h1>
+    <p>Photograph a handwritten page, whiteboard, or printed sheet. Loupe reads it and hands back a clean, structured document ready to copy, share, or export.</p>
+  </div>
+
+  <div id="install-banner" class="install-banner">
+    <p>Add Loupe to your home screen for quick note scanning.</p>
+    <div style="display:flex;gap:var(--space-2)">
+      <button class="btn btn-sm" id="install-btn">Add to home screen</button>
+      <button class="btn btn-sm btn-ghost" id="install-dismiss">Not now</button>
+    </div>
+  </div>
+
+  <div class="tool-body">
+
+    <!-- style chips -->
+    <div class="notes-toolbar">
+      <div>
+        <p class="eyebrow" style="margin-bottom:var(--space-2)">Output style</p>
+        <div class="style-chips">
+          <button class="chip is-active" data-style="structured" onclick="setStyle(this)">Structured notes</button>
+          <button class="chip" data-style="bullets"    onclick="setStyle(this)">Bullet list</button>
+          <button class="chip" data-style="prose"      onclick="setStyle(this)">Clean prose</button>
+          <button class="chip" data-style="summary"    onclick="setStyle(this)">Summary only</button>
+        </div>
+      </div>
+      <div id="scan-again-btn" style="display:none">
+        <button class="btn btn-ghost btn-sm" onclick="resetNotes()">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 2l-1.5 1.5A5 5 0 1 0 12 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Scan another
+        </button>
+      </div>
+    </div>
+
+    <!-- upload zone -->
+    <div id="upload-zone" class="upload-zone"
+         ondragover="handleNoteDragOver(event)"
+         ondragleave="handleNoteDragLeave(event)"
+         ondrop="handleNoteDrop(event)"
+         onclick="document.getElementById('note-file-input').click()">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <rect x="10" y="8" width="28" height="32" rx="2" stroke="#DBDCD4" stroke-width="1.8"/>
+        <path d="M16 18h16M16 23h12M16 28h8" stroke="#DBDCD4" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="36" cy="36" r="7" fill="#F2A93B"/>
+        <path d="M36 33v6M33 36h6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <h3>Photograph a page of notes</h3>
+      <p>Handwriting, whiteboard, printed text — anything goes</p>
+      <span class="btn btn-sm" style="pointer-events:none;border-color:var(--ink);font-weight:600">Choose photo</span>
+      <!-- single file input — no duplicate ID -->
+      <input type="file" id="note-file-input" class="visually-hidden" accept="image/*" onchange="handleNoteFile(this.files[0])" />
+    </div>
+
+    <!-- scan + doc layout -->
+    <div id="notes-layout" class="notes-two-col" style="display:none">
+
+      <!-- LEFT: scanned image -->
+      <div>
+        <div class="pane-label">
+          <span>ORIGINAL</span>
+          <button class="btn btn-sm btn-ghost" onclick="document.getElementById('note-file-replace').click()" style="padding:0.3rem 0.6rem">Replace</button>
+          <!-- separate file input for the replace button — different ID to avoid duplicate -->
+          <input type="file" id="note-file-replace" class="visually-hidden" accept="image/*" onchange="handleNoteFile(this.files[0])" />
+        </div>
+        <div class="scan-preview" id="scan-preview">
+          <img id="scan-img" src="" alt="Your scanned notes" />
+          <div class="scan-line" id="scan-line"></div>
+        </div>
+
+        <!-- history strip -->
+        <div style="margin-top:var(--space-3)">
+          <p class="eyebrow" style="margin-bottom:var(--space-2)">SCAN HISTORY</p>
+          <div id="history-strip" class="history-strip">
+            <p style="font-family:var(--font-mono);font-size:0.75rem;color:var(--ash)">No history yet</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: clean doc -->
+      <div>
+        <div class="pane-label">
+          <span>CLEAN DOCUMENT</span>
+          <span id="word-count" class="word-count">0 words</span>
+        </div>
+        <div class="doc-output" id="doc-output">
+          <div class="doc-placeholder" id="doc-placeholder">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+              <rect x="8" y="6" width="24" height="28" rx="2" stroke="#DBDCD4" stroke-width="1.6"/>
+              <path d="M13 14h14M13 19h10M13 24h7" stroke="#DBDCD4" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+            <p>Your clean document will appear here</p>
+          </div>
+          <div id="doc-content" style="display:none"></div>
+        </div>
+
+        <div class="export-strip" id="export-strip" style="display:none">
+          <p id="doc-meta">Ready</p>
+          <div style="display:flex;gap:var(--space-2);flex-wrap:wrap">
+            <button class="btn btn-sm btn-ghost" onclick="copyDoc()">Copy text</button>
+            <button class="btn btn-sm btn-ghost" onclick="downloadMd()">Download .md</button>
+            <button class="btn btn-sm btn-accent" onclick="shareDoc()">Share →</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>LOUPE · NOTES SCANNER</p>
+    <p>POWERED BY GEMINI · ALL IMAGES PROCESSED ON SECURE SERVER</p>
+  </div>
+</footer>
+
+<script src="./js/app.js"></script>
+<script src="./js/notes.js"></script>
+</body>
+</html>

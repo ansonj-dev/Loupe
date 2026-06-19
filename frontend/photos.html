@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Photo sort — Loupe</title>
+<meta name="description" content="Sort your photos on-device. Loupe finds the sharpest frame in every burst, flags blurry shots, and groups near-duplicates." />
+<meta name="theme-color" content="#F4F5F0" />
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" href="./icons/icon-192.png" />
+<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./css/styles.css" />
+<style>
+  /* ---- page-specific overrides ---- */
+
+  .shot-actions {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0 var(--space-2) var(--space-2);
+  }
+  .shot-actions button {
+    flex: 1;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.4rem 0;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .shot-actions .keep-btn { border-color: var(--ink); color: var(--ink); }
+  .shot-actions .keep-btn:hover { background: var(--ink); color: var(--paper); }
+  .shot-actions .skip-btn:hover { background: var(--line); }
+
+  .shot.is-skipped { opacity: 0.35; }
+  .shot.is-skipped .shot-image-wrap::after {
+    content: '✕';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--loupe-red);
+    background: rgba(225,79,58,0.12);
+  }
+
+  .shot.is-keeper::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--ink);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* stats bar */
+  .stats-bar {
+    display: flex;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    margin: var(--space-4) 0;
+    flex-wrap: wrap;
+  }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-val {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.6rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ash);
+    letter-spacing: 0.04em;
+  }
+  .stat + .stat { padding-left: var(--space-4); border-left: 1px solid var(--line); }
+
+  /* share tray */
+  .share-tray {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--paper-raised);
+    border-top: 1.5px solid var(--ink);
+    padding: var(--space-3) var(--space-4);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+    z-index: 30;
+  }
+  .share-tray.is-visible { transform: translateY(0); }
+  .share-tray p { font-size: 0.9rem; font-weight: 600; }
+  .share-tray-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+  /* score pill */
+  .score-pill {
+    position: absolute;
+    top: 6px; right: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 500;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid rgba(0,0,0,0.12);
+    backdrop-filter: blur(4px);
+    z-index: 2;
+  }
+
+  /* scanning overlay */
+  .scan-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(242,169,59,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    animation: flicker 0.8s ease-in-out infinite alternate;
+    z-index: 3;
+  }
+  @keyframes flicker { from { opacity: 0.5; } to { opacity: 1; } }
+
+  /* filter tabs */
+  .filter-tabs {
+    display: flex;
+    gap: 0;
+    border: 1.5px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .filter-tab {
+    border: none;
+    background: transparent;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--ash);
+    cursor: pointer;
+    border-right: 1px solid var(--line-strong);
+    white-space: nowrap;
+  }
+  .filter-tab:last-child { border-right: none; }
+  .filter-tab.is-active { background: var(--ink); color: var(--paper); }
+
+  /* picks strip */
+  .pick-thumb {
+    position: relative;
+    border: 1.5px solid var(--ink);
+    overflow: hidden;
+    flex-shrink: 0;
+    width: 110px;
+  }
+  .pick-thumb img { aspect-ratio: 4/5; object-fit: cover; width: 100%; }
+  .pick-thumb .pick-rank {
+    position: absolute;
+    top: 5px; left: 5px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    padding: 2px 5px;
+  }
+  .pick-thumb .pick-score {
+    position: absolute;
+    bottom: 5px; right: 5px;
+    background: rgba(255,255,255,0.88);
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    padding: 2px 5px;
+  }
+  .picks-strip {
+    display: flex;
+    gap: var(--space-2);
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+  }
+</style>
+<!-- Novus.ai (Pendo) Integration -->
+<script>
+(function(apiKey){
+    (function(p,e,n,d,o){var v,w,x,y,z;o=p[d]=p[d]||{};o._q=o._q||[];
+    v=['initialize','identify','updateOptions','pageLoad','track', 'trackAgent'];for(w=0,x=v.length;w<x;++w)(function(m){
+    o[m]=o[m]||function(){o._q[m===v[0]?'unshift':'push']([m].concat([].slice.call(arguments,0)));};})(v[w]);
+    y=e.createElement(n);y.async=!0;y.src='https://cdn.pendo.io/agent/static/'+apiKey+'/pendo.js';
+    z=e.getElementsByTagName(n)[0];z.parentNode.insertBefore(y,z);})(window,document,'script','pendo');
+})('b33ac075-ed73-4cab-bfd7-be9c11e657e3');
+</script>
+<script>
+if (window.pendo) {
+  pendo.initialize({
+    visitor: {
+      id: ''
+    }
+  });
+}
+</script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="./index.html">
+      <svg class="brand-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="14" y="14" width="72" height="72" fill="none" stroke="#15171B" stroke-width="6"/>
+        <circle cx="48" cy="48" r="22" fill="none" stroke="#E14F3A" stroke-width="6"/>
+        <line x1="63" y1="63" x2="74" y2="74" stroke="#E14F3A" stroke-width="6" stroke-linecap="round"/>
+      </svg>
+      Loupe
+    </a>
+    <nav class="nav-links">
+      <a class="nav-link" href="./photos.html">Photo sort</a>
+      <a class="nav-link" href="./notes.html">Notes scanner</a>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <div class="tool-header">
+    <p class="eyebrow">ROLL A — 36 EXP</p>
+    <h1>Photo sort</h1>
+    <p>Drop your shots in. Loupe reads sharpness, exposure, and similarity — then circles the keeper in each group.</p>
+  </div>
+
+  <div id="install-banner" class="install-banner">
+    <p>Add Loupe to your home screen for one-tap sorting.</p>
+    <div style="display:flex;gap:var(--space-2)">
+      <button class="btn btn-sm" id="install-btn">Add to home screen</button>
+      <button class="btn btn-sm btn-ghost" id="install-dismiss">Not now</button>
+    </div>
+  </div>
+
+  <div class="tool-body">
+
+    <!-- toolbar: mode toggle + filter + scan trigger -->
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <div class="mode-toggle" role="group" aria-label="Scan mode">
+          <button id="mode-auto" class="is-active" onclick="setMode('auto')">Auto scan</button>
+          <button id="mode-manual" onclick="setMode('manual')">Tap to scan</button>
+        </div>
+        <span id="scan-indicator" class="scan-indicator is-live">
+          <span class="scan-dot"></span>
+          <span id="scan-status">Watching for new photos</span>
+        </span>
+      </div>
+      <div class="toolbar-group">
+        <div class="filter-tabs" role="group" aria-label="Filter photos">
+          <button class="filter-tab is-active" onclick="setFilter('all', this)">All</button>
+          <button class="filter-tab" onclick="setFilter('keepers', this)">Keepers</button>
+          <button class="filter-tab" onclick="setFilter('skip', this)">Skipped</button>
+          <button class="filter-tab" onclick="setFilter('similar', this)">Clusters</button>
+        </div>
+        <button class="btn btn-sm" id="manual-scan-btn" style="display:none" onclick="runScan()">
+          Scan now
+        </button>
+      </div>
+    </div>
+
+    <!-- drop zone -->
+    <div id="dropzone" class="dropzone" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style="margin:0 auto 12px">
+        <rect x="6" y="6" width="28" height="28" rx="2" stroke="#6B6F76" stroke-width="1.5"/>
+        <circle cx="19" cy="19" r="8" stroke="#E14F3A" stroke-width="1.5"/>
+        <line x1="25" y1="25" x2="30" y2="30" stroke="#E14F3A" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <h3>Drop your photos here</h3>
+      <p>JPEG, PNG, HEIC — any size, as many as you like</p>
+      <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Pick photos</button>
+      <input type="file" id="file-input" class="visually-hidden" accept="image/*" multiple onchange="handleFiles(this.files)" />
+    </div>
+
+    <!-- progress bar -->
+    <div id="scan-progress" class="scan-progress">
+      <div id="scan-progress-bar" class="scan-progress-bar"></div>
+    </div>
+
+    <!-- stats bar -->
+    <div id="stats-bar" class="stats-bar" style="display:none">
+      <div class="stat">
+        <span class="stat-val" id="stat-total">0</span>
+        <span class="stat-label">TOTAL SHOTS</span>
+      </div>
+      <div class="stat">
+        <span class="stat-val" id="stat-keepers" style="color:var(--good)">0</span>
+        <span class="stat-label">KEEPERS</span>
+      </div>
+      <div class="stat">
+        <span class="stat-val" id="stat-blurry" style="color:var(--loupe-red)">0</span>
+        <span class="stat-label">BLURRY / DARK</span>
+      </div>
+      <div class="stat">
+        <span class="stat-val" id="stat-clusters">0</span>
+        <span class="stat-label">CLUSTERS</span>
+      </div>
+    </div>
+
+    <!-- top picks strip -->
+    <div id="picks-section" class="picks-rail" style="display:none">
+      <h2>TOP PICKS</h2>
+      <div id="picks-strip" class="picks-strip"></div>
+    </div>
+
+    <!-- contact sheet -->
+    <div id="sheet-all" class="sheet-section" style="display:none">
+      <div class="sheet-section-title">
+        <h2>All shots</h2>
+        <span class="count" id="count-all">0 frames</span>
+      </div>
+      <div id="contact-sheet" class="contact-sheet"></div>
+    </div>
+
+    <!-- cluster view -->
+    <div id="sheet-clusters" class="sheet-section" style="display:none">
+      <div class="sheet-section-title">
+        <h2>Similar clusters</h2>
+        <span class="count" id="count-clusters">0 groups</span>
+      </div>
+      <div id="cluster-container"></div>
+    </div>
+
+    <div id="empty-state" class="empty-state" style="display:none">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+        <rect x="10" y="10" width="28" height="28" rx="1" stroke="#DBDCD4" stroke-width="2"/>
+        <circle cx="23" cy="23" r="9" stroke="#DBDCD4" stroke-width="2"/>
+      </svg>
+      <p style="font-family:var(--font-mono);font-size:0.85rem">No photos in this filter</p>
+    </div>
+
+  </div>
+</main>
+
+<!-- share tray -->
+<div id="share-tray" class="share-tray">
+  <p id="tray-count">0 keepers ready</p>
+  <div class="share-tray-actions">
+    <button class="btn btn-sm btn-ghost" onclick="exportKeepers('download')">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M3 7l4 4 4-4M2 12h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Download
+    </button>
+    <button class="btn btn-sm btn-accent" onclick="exportKeepers('share')">Share →</button>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>LOUPE · PHOTO SORT</p>
+    <p>ALL PROCESSING HAPPENS ON YOUR DEVICE</p>
+  </div>
+</footer>
+
+<script src="./js/app.js"></script>
+<script src="./js/photos.js"></script>
+</body>
+</html>

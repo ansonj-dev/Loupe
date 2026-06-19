@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Loupe — circle the keeper</title>
+<meta name="description" content="Loupe scans your camera roll for the sharpest, least-blurry, least-repeated shot — and turns photographed notes into a clean document." />
+<meta name="theme-color" content="#F4F5F0" />
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" href="./icons/icon-192.png" />
+<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./css/styles.css" />
+<!-- Novus.ai (Pendo) Integration -->
+<script>
+(function(apiKey){
+    (function(p,e,n,d,o){var v,w,x,y,z;o=p[d]=p[d]||{};o._q=o._q||[];
+    v=['initialize','identify','updateOptions','pageLoad','track', 'trackAgent'];for(w=0,x=v.length;w<x;++w)(function(m){
+    o[m]=o[m]||function(){o._q[m===v[0]?'unshift':'push']([m].concat([].slice.call(arguments,0)));};})(v[w]);
+    y=e.createElement(n);y.async=!0;y.src='https://cdn.pendo.io/agent/static/'+apiKey+'/pendo.js';
+    z=e.getElementsByTagName(n)[0];z.parentNode.insertBefore(y,z);})(window,document,'script','pendo');
+})('b33ac075-ed73-4cab-bfd7-be9c11e657e3');
+</script>
+<script>
+if (window.pendo) {
+  pendo.initialize({
+    visitor: {
+      id: ''
+    }
+  });
+}
+</script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="./index.html">
+      <svg class="brand-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="14" y="14" width="72" height="72" fill="none" stroke="#15171B" stroke-width="6"/>
+        <circle cx="48" cy="48" r="22" fill="none" stroke="#E14F3A" stroke-width="6"/>
+        <line x1="63" y1="63" x2="74" y2="74" stroke="#E14F3A" stroke-width="6" stroke-linecap="round"/>
+      </svg>
+      Loupe
+    </a>
+    <nav class="nav-links">
+      <a class="nav-link" href="./photos.html">Photo sort</a>
+      <a class="nav-link" href="./notes.html">Notes scanner</a>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <section class="hero">
+    <div>
+      <p class="eyebrow">Two jobs. Nothing else.</p>
+      <h1>Stop sorting.<br>Start <span class="accent">picking.</span></h1>
+      <p class="lede">Loupe scans the photos piling up on your phone and circles the one worth posting. Snap your notes, and it hands back a document that actually looks like you tried.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="./photos.html">Sort my photos →</a>
+        <a class="btn btn-ghost" href="./notes.html">Scan my notes →</a>
+      </div>
+    </div>
+
+    <div class="light-table" aria-hidden="true">
+      <div class="light-table-grid">
+        <div class="frame"><span class="frame-number">001</span></div>
+        <div class="frame is-keeper">
+          <span class="frame-number">002</span>
+          <svg class="circle-mark" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <path d="M 50 8 A 42 42 0 1 1 49.9 8" />
+          </svg>
+        </div>
+        <div class="frame"><span class="frame-number">003</span></div>
+        <div class="frame"><span class="frame-number">004</span></div>
+        <div class="frame"><span class="frame-number">005</span></div>
+        <div class="frame"><span class="frame-number">006</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rolls">
+    <a class="roll-card" href="./photos.html">
+      <span class="roll-label"><span>ROLL A</span><span>36 EXP</span></span>
+      <h3>Photo sort</h3>
+      <p>Drop in everything you shot today. Loupe flags the blurry ones, groups the near-duplicates, and circles the sharpest frame in each group — set it to watch automatically, or scan only when you tap.</p>
+      <span class="roll-cta">Open photo sort
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M9 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+    </a>
+    <a class="roll-card" href="./notes.html">
+      <span class="roll-label"><span>ROLL B</span><span>1 SHOT</span></span>
+      <h3>Notes scanner</h3>
+      <p>Photograph the whiteboard, the textbook page, the notebook you scribbled in five minutes before class ended. Loupe reads it and hands back a clean, structured document.</p>
+      <span class="roll-cta">Open notes scanner
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M9 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+    </a>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p>LOUPE · BUILT FOR WORLD PRODUCT DAY 2026</p>
+    <p>RUNS ON-DEVICE · NO ACCOUNT NEEDED</p>
+  </div>
+</footer>
+
+<script src="./js/app.js"></script>
+</body>
+</html>

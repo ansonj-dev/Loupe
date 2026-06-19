@@ -89,32 +89,123 @@ async function localMetrics(buffer) {
 }
 
 /**
- * Ask Gemini to score a single photo on quality/keeper/issues.
+ * Ask Gemini to score a single photo with comprehensive professional photography criteria.
+ * Evaluates 25+ quality factors including technical quality, composition, aesthetics, and more.
  * Returns parsed JSON or graceful fallback.
  */
 async function aiScore(buffer, mimeType) {
-  const prompt = `You are an expert photo editor reviewing a photo for social media quality.
+  const prompt = `You are a PROFESSIONAL PHOTO EDITOR and QUALITY ANALYST. Analyze this image comprehensively across ALL quality dimensions.
 
-Analyse this photo and return ONLY a valid JSON object — no markdown, no explanation — with exactly these fields:
+EVALUATE THESE FACTORS:
+
+📸 TECHNICAL QUALITY (40%):
+- Sharpness / Focus (overall and subject-specific)
+- Motion Blur presence and severity
+- Exposure Quality (histogram balance, not too dark/bright)
+- Color Accuracy & White Balance
+- Contrast Quality and tonal range
+- Noise / Grain Level
+- Resolution / Detail Level
+- Dynamic Range
+
+👤 SUBJECT QUALITY (30% - if applicable):
+- Face Sharpness (eyes, facial details)
+- Face Orientation (looking at camera vs away)
+- Eyes Open Detection
+- Smile / Expression Quality
+- Facial Occlusion (hands, objects, hair blocking face)
+- Subject Visibility and clarity
+- Subject separation from background
+
+🎨 COMPOSITION & AESTHETICS (20%):
+- Composition Score (rule of thirds, golden ratio, framing)
+- Background Quality (distraction level, bokeh, context)
+- Subject Centering and positioning
+- Cropping Quality (nothing cut off improperly)
+- Leading lines, symmetry, balance
+- Color Harmony and palette
+- Lighting quality and direction
+
+✨ OVERALL APPEAL (10%):
+- Aesthetic Quality (artistic value)
+- Emotional Impact (does it evoke feeling?)
+- Professional Photography Score
+- Shareability / Social Media readiness
+- Uniqueness vs generic/repetitive
+
+🔍 DUPLICATE & SIMILARITY:
+- Is this likely a burst/duplicate of another shot?
+- Any obvious repetition patterns?
+
+---
+
+RETURN **ONLY** THIS EXACT JSON (no markdown, no explanation):
 
 {
-  "quality_score": <integer 0–100; 100 = perfect, 0 = unusable>,
-  "keeper": <true|false; would you post or share this photo?>,
-  "issues": <array of short strings from: ["blurry","underexposed","overexposed","out_of_focus","bad_composition","duplicate_likely","motion_blur","noise","empty_scene","obstructed"]>,
-  "highlights": <array of short strings — what's good, e.g. ["sharp subject","good light","nice composition"]>,
-  "reason": <single sentence, max 12 words, plain English>
+  "quality_score": <0-100 integer, composite of all factors>,
+  "keeper": <true/false - would a professional keep this?>,
+  "category": "<string: portrait|landscape|product|food|architecture|abstract|animal|other>",
+  "technical_scores": {
+    "sharpness": <0-100>,
+    "focus": <0-100>,
+    "exposure": <0-100>,
+    "color_accuracy": <0-100>,
+    "contrast": <0-100>,
+    "noise_level": <0-100, higher = cleaner>,
+    "resolution": <0-100>,
+    "dynamic_range": <0-100>
+  },
+  "subject_scores": {
+    "face_sharpness": <0-100 or null if no face>,
+    "eyes_open": <true/false/null>,
+    "expression_quality": <0-100 or null>,
+    "occlusion": <0-100, higher = less occluded>,
+    "orientation": <"frontal"|"profile"|"back"|"none">
+  },
+  "composition_scores": {
+    "overall": <0-100>,
+    "rule_of_thirds": <0-100>,
+    "background": <0-100, higher = cleaner>,
+    "centering": <0-100>,
+    "cropping": <0-100>,
+    "balance": <0-100>
+  },
+  "aesthetic_scores": {
+    "overall": <0-100>,
+    "emotional_impact": <0-100>,
+    "professional_grade": <0-100>,
+    "social_media_ready": <0-100>
+  },
+  "issues": [<array of: "blurry","motion_blur","underexposed","overexposed","out_of_focus","bad_composition","duplicate_likely","noise","grainy","color_cast","facial_occlusion","eyes_closed","cut_off","distracted_bg","low_resolution","compressed","washed_out","too_dark","overprocessed">],
+  "highlights": [<array of strengths: "sharp_subject","perfect_focus","excellent_exposure","vibrant_colors","clean_background","great_composition","professional_lighting","emotional","unique","rule_of_thirds","well_framed","good_expression","natural_colors","high_detail","perfect_moment","creative","aesthetic">],
+  "reason": "<one sentence, max 15 words, explaining keeper status>"
 }
 
-Be strict — only images a person would actually want to share should get keeper:true. Respond with JSON only.`;
+SCORING RULES:
+- Be STRICT: Only truly excellent photos score >80
+- Be HONEST: Bad photos should score <40
+- Keeper = true ONLY if you'd actually share/post it
+- If portrait: Weight face/expression heavily
+- If landscape: Weight composition/lighting heavily
+- If product: Weight clarity/detail/lighting heavily
+- Duplicates: Analyze individually but flag if obvious burst
+
+RESPOND WITH JSON ONLY.`;
 
   try {
-    const raw   = await callGemini([imageBlock(buffer, mimeType), { text: prompt }], 300);
+    const raw   = await callGemini([imageBlock(buffer, mimeType), { text: prompt }], 1000);
     const clean = raw.replace(/```json|```/g, '').trim();
     return JSON.parse(clean);
-  } catch (_) {
+  } catch (err) {
+    console.error('AI scoring error:', err.message);
     return {
       quality_score: null,
       keeper: null,
+      category: 'other',
+      technical_scores: {},
+      subject_scores: {},
+      composition_scores: {},
+      aesthetic_scores: {},
       issues: [],
       highlights: [],
       reason: 'AI scoring unavailable',
@@ -190,9 +281,19 @@ router.post('/analyze', aiLimiter, uploadMany, async (req, res) => {
         local_score:    localScore,
         ai_score:       ai.quality_score,
         keeper,
+        category:       ai.category || 'other',
+        
+        // Detailed scoring breakdown
+        technical_scores:   ai.technical_scores || {},
+        subject_scores:     ai.subject_scores || {},
+        composition_scores: ai.composition_scores || {},
+        aesthetic_scores:   ai.aesthetic_scores || {},
+        
         issues:         ai.issues     || [],
         highlights:     ai.highlights || [],
         reason:         ai.reason     || '',
+        
+        // Local metrics (fast, on-device)
         sharpness:      m.sharpScore,
         exposure:       m.expScore,
         mean_luminance: Math.round(m.meanLum),
@@ -261,9 +362,19 @@ router.post('/analyze-one', aiLimiter, uploadOne, async (req, res) => {
       filename:       file.originalname,
       score:          composite,
       keeper:         ai.keeper !== null ? ai.keeper : composite >= 55,
+      category:       ai.category || 'other',
+      
+      // Detailed scoring breakdown
+      technical_scores:   ai.technical_scores || {},
+      subject_scores:     ai.subject_scores || {},
+      composition_scores: ai.composition_scores || {},
+      aesthetic_scores:   ai.aesthetic_scores || {},
+      
       issues:         ai.issues     || [],
       highlights:     ai.highlights || [],
       reason:         ai.reason     || '',
+      
+      // Local metrics
       sharpness:      m.sharpScore,
       exposure:       m.expScore,
       mean_luminance: Math.round(m.meanLum),

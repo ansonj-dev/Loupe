@@ -3,13 +3,14 @@
 (function () {
   // ── config ─────────────────────────────────────────────────
   const API_BASE    = (window.LOUPE_API_BASE || 'http://localhost:3001').replace(/\/$/, '');
-  const USE_BACKEND = true; // set false to run fully on-device
+  const USE_BACKEND = false; // set false to run fully on-device (TEMP: API quota exceeded)
 
   // ── state ──────────────────────────────────────────────────
   let photos       = [];
   let mode         = 'auto';
   let activeFilter = 'all';
   let pendingFiles = [];
+  let galleryAgent = null; // AI Agent instance
 
   // ── DOM refs ───────────────────────────────────────────────
   const dropzone        = document.getElementById('dropzone');
@@ -28,6 +29,313 @@
   const scanIndicator   = document.getElementById('scan-indicator');
   const scanStatus      = document.getElementById('scan-status');
   const manualScanBtn   = document.getElementById('manual-scan-btn');
+
+  // AI Agent DOM refs
+  const agentStatusDot = document.getElementById('agent-status-dot');
+  const agentStatusText = document.getElementById('agent-status-text');
+  const agentActivateBtn = document.getElementById('agent-activate-btn');
+  const agentRestoreBtn = document.getElementById('agent-restore-btn');
+  const agentDeactivateBtn = document.getElementById('agent-deactivate-btn');
+  const agentClearHistoryBtn = document.getElementById('agent-clear-history-btn');
+  const agentInfo = document.getElementById('agent-info');
+  const agentInfoText = document.getElementById('agent-info-text');
+
+  // ══════════════════════════════════════════════════════════════
+  // AI GALLERY AGENT (Desktop + Mobile)
+  // ══════════════════════════════════════════════════════════════
+
+  window.activateGalleryAgent = async function() {
+    if (!window.DirectoryAgent && !window.MobileAgent) {
+      alert('Agent library not loaded');
+      return;
+    }
+
+    // Check if mobile
+    const isMobile = window.MobileAgent && window.MobileAgent.isMobile();
+
+    if (isMobile) {
+      // Mobile mode: Use enhanced folder picker or camera
+      try {
+        galleryAgent = new window.MobileAgent({
+          id: 'gallery-agent-mobile',
+          fileTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
+        });
+
+        galleryAgent.on('fileAdded', async (data) => {
+          console.log('📸 New photo detected (mobile):', data.name);
+          updateAgentStatus('scanning', `Processing: ${data.name}`);
+          await handleFiles([data.file]);
+          updateAgentStatus('watching', `Mobile Agent: Ready`);
+        });
+
+        galleryAgent.on('statusChange', (data) => {
+          console.log('Mobile agent status:', data);
+          if (data.status === 'activated_mobile') {
+            updateAgentStatus('watching', `Mobile Agent: ${data.mode === 'camera' ? 'Camera Ready' : 'Folder Ready'}`);
+          }
+        });
+
+        // Show mobile options
+        showMobileAgentOptions();
+
+      } catch (err) {
+        console.error('Failed to activate mobile agent:', err);
+        updateAgentStatus('inactive', 'AI Agent: Failed to activate');
+        alert('Failed to activate mobile agent: ' + err.message);
+      }
+    } else {
+      // Desktop mode: Use File System Access API
+      if (!window.DirectoryAgent.isSupported()) {
+        alert('Automatic folder watching is not supported in this browser. Please use Chrome, Edge, or Opera on desktop.');
+        return;
+      }
+
+      try {
+        galleryAgent = new window.DirectoryAgent({
+          id: 'gallery-agent',
+          pollInterval: 5000,
+          fileTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
+        });
+
+        // Set up event listeners
+        galleryAgent.on('fileAdded', async (data) => {
+          console.log('📸 New photo detected:', data.name);
+          updateAgentStatus('scanning', `Processing: ${data.name}`);
+          await handleFiles([data.file]);
+          
+          // Show statistics after processing
+          const statsMsg = `Watching: ${data.path} (${data.stats.totalProcessed} processed, ${data.stats.skippedFiles} skipped)`;
+          updateAgentStatus('watching', statsMsg);
+        });
+
+        galleryAgent.on('scanComplete', (data) => {
+          console.log('📊 Scan complete:', data);
+          if (data.newFiles > 0) {
+            console.log(`✓ Found ${data.newFiles} new files, skipped ${data.skippedFiles} already processed`);
+          }
+        });
+
+        galleryAgent.on('statusChange', (data) => {
+          console.log('Agent status:', data);
+          if (data.status === 'activated' || data.status === 'restored' || data.status === 'watching') {
+            const statsMsg = data.processedCount > 0 
+              ? `Watching: ${data.path} (${data.processedCount} files already processed)`
+              : `Watching: ${data.path}`;
+            updateAgentStatus('watching', statsMsg);
+          } else if (data.status === 'history_cleared') {
+            updateAgentStatus('watching', `History cleared for ${data.path}. All files will be re-scanned.`);
+            agentInfoText.textContent = `✓ History cleared. The agent will now process all files in the folder.`;
+          }
+        });
+
+        galleryAgent.on('error', (data) => {
+          console.error('Agent error:', data.message);
+          updateAgentStatus('inactive', 'AI Agent: Error - ' + data.message);
+        });
+
+        // Activate
+        const result = await galleryAgent.activate();
+        if (result.success) {
+          const statsMsg = result.processedCount > 0
+            ? `Watching: ${result.path} (${result.processedCount} files already processed)`
+            : `Watching: ${result.path}`;
+          updateAgentStatus('watching', statsMsg);
+          agentActivateBtn.style.display = 'none';
+          agentRestoreBtn.style.display = 'none';
+          agentDeactivateBtn.style.display = '';
+          agentClearHistoryBtn.style.display = '';
+          agentInfo.style.display = '';
+          
+          const infoMsg = result.processedCount > 0
+            ? `✓ Agent is monitoring your gallery folder. ${result.processedCount} files already processed will be skipped.`
+            : `✓ Agent is monitoring your gallery folder. New photos will be automatically processed.`;
+          agentInfoText.textContent = infoMsg;
+        }
+      } catch (err) {
+        console.error('Failed to activate agent:', err);
+        updateAgentStatus('inactive', 'AI Agent: Failed to activate');
+        if (err.name === 'AbortError') {
+          // User cancelled the picker
+          return;
+        }
+        alert('Failed to activate agent: ' + err.message);
+      }
+    }
+  };
+
+  function showMobileAgentOptions() {
+    // Update UI to show mobile-specific options
+    agentActivateBtn.style.display = 'none';
+    agentRestoreBtn.style.display = 'none';
+    agentDeactivateBtn.style.display = '';
+    agentInfo.style.display = '';
+    agentInfoText.innerHTML = `
+      <p style="margin-bottom: var(--space-2);">📱 Mobile Agent Active - Choose upload method:</p>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <input type="file" id="mobile-folder-input" webkitdirectory directory multiple accept="image/*" style="display: none;" onchange="handleFiles(this.files)" />
+        <button class="btn btn-sm btn-primary" onclick="document.getElementById('mobile-folder-input').click()">
+          📁 Select Folder
+        </button>
+        <input type="file" id="mobile-camera-input" capture="environment" accept="image/*" style="display: none;" onchange="handleFiles(this.files)" />
+        <button class="btn btn-sm btn-primary" onclick="document.getElementById('mobile-camera-input').click()">
+          📸 Take Photo
+        </button>
+        <input type="file" id="mobile-multi-input" multiple accept="image/*" style="display: none;" onchange="handleFiles(this.files)" />
+        <button class="btn btn-sm btn-ghost" onclick="document.getElementById('mobile-multi-input').click()">
+          🖼️ Select Multiple
+        </button>
+      </div>
+    `;
+
+    // Set up the mobile agent with the inputs
+    const folderInput = document.getElementById('mobile-folder-input');
+    const cameraInput = document.getElementById('mobile-camera-input');
+    const multiInput = document.getElementById('mobile-multi-input');
+
+    if (galleryAgent && folderInput) {
+      galleryAgent.activateWithFolderPicker(folderInput);
+    }
+    if (galleryAgent && cameraInput) {
+      galleryAgent.activateWithCamera(cameraInput);
+    }
+
+    updateAgentStatus('watching', 'Mobile Agent: Ready');
+  }
+
+  window.restoreGalleryAgent = async function() {
+    if (!galleryAgent) return;
+    
+    const savedData = await galleryAgent.storage.getDirectory('gallery-agent');
+    if (savedData && savedData.handle) {
+      updateAgentStatus('inactive', 'Requesting permission...');
+      const result = await galleryAgent.requestPermission(savedData.handle);
+      if (result.success) {
+        agentActivateBtn.style.display = 'none';
+        agentRestoreBtn.style.display = 'none';
+        agentDeactivateBtn.style.display = '';
+        agentClearHistoryBtn.style.display = '';
+        agentInfo.style.display = '';
+        
+        const processedCount = galleryAgent.scanStats.totalProcessed;
+        const infoMsg = processedCount > 0
+          ? `✓ Agent restored. Monitoring folder. ${processedCount} files already processed will be skipped.`
+          : `✓ Agent restored. Monitoring folder for new photos.`;
+        agentInfoText.textContent = infoMsg;
+      } else {
+        updateAgentStatus('inactive', 'Permission denied');
+      }
+    }
+  };
+
+  window.deactivateGalleryAgent = async function() {
+    if (!galleryAgent) return;
+    
+    await galleryAgent.deactivate();
+    galleryAgent = null;
+    
+    updateAgentStatus('inactive', 'AI Agent: Inactive');
+    agentActivateBtn.style.display = '';
+    agentRestoreBtn.style.display = 'none';
+    agentDeactivateBtn.style.display = 'none';
+    agentClearHistoryBtn.style.display = 'none';
+    agentInfo.style.display = 'none';
+  };
+
+  window.clearGalleryAgentHistory = async function() {
+    if (!galleryAgent || !galleryAgent.folderPath) {
+      alert('No active folder to clear history for');
+      return;
+    }
+
+    if (!confirm(`Clear processing history for "${galleryAgent.folderPath}"?\n\nThis will allow the agent to re-scan all files in this folder.`)) {
+      return;
+    }
+
+    try {
+      await galleryAgent.clearHistory();
+      alert(`History cleared for "${galleryAgent.folderPath}". All files will be re-scanned on next check.`);
+    } catch (err) {
+      alert('Failed to clear history: ' + err.message);
+    }
+  };
+
+  function updateAgentStatus(status, text) {
+    agentStatusText.textContent = text || 'AI Agent: Inactive';
+    agentStatusDot.className = 'agent-status-dot';
+    
+    if (status === 'watching') {
+      agentStatusDot.classList.add('is-active');
+    } else if (status === 'scanning') {
+      agentStatusDot.classList.add('is-scanning');
+    }
+  }
+
+  // Try to restore agent on page load
+  (async function initAgent() {
+    const isMobile = window.MobileAgent && window.MobileAgent.isMobile();
+    
+    if (isMobile) {
+      // Mobile: Always show activate button, no restore needed
+      updateAgentStatus('inactive', 'AI Agent: Tap to activate');
+      agentActivateBtn.textContent = '📱 Activate Mobile Agent';
+      return;
+    }
+
+    if (!window.DirectoryAgent || !window.DirectoryAgent.isSupported()) {
+      return;
+    }
+
+    galleryAgent = new window.DirectoryAgent({
+      id: 'gallery-agent',
+      pollInterval: 5000
+    });
+
+    galleryAgent.on('fileAdded', async (data) => {
+      console.log('📸 New photo detected:', data.name);
+      updateAgentStatus('scanning', `Processing: ${data.name}`);
+      await handleFiles([data.file]);
+      
+      const statsMsg = data.stats 
+        ? `Watching: ${data.path} (${data.stats.totalProcessed} processed, ${data.stats.skippedFiles} skipped)`
+        : `Watching: ${data.path}`;
+      updateAgentStatus('watching', statsMsg);
+    });
+
+    galleryAgent.on('statusChange', (data) => {
+      if (data.status === 'watching' || data.status === 'restored') {
+        const statsMsg = data.processedCount > 0
+          ? `Watching: ${data.path} (${data.processedCount} already processed)`
+          : `Watching: ${data.path}`;
+        updateAgentStatus('watching', statsMsg);
+      }
+    });
+
+    const restoreResult = await galleryAgent.restore();
+    if (restoreResult.success) {
+      agentActivateBtn.style.display = 'none';
+      agentRestoreBtn.style.display = 'none';
+      agentDeactivateBtn.style.display = '';
+      agentClearHistoryBtn.style.display = '';
+      agentInfo.style.display = '';
+      
+      const infoMsg = restoreResult.processedCount > 0
+        ? `✓ Agent restored from previous session. ${restoreResult.processedCount} files already processed will be skipped.`
+        : `✓ Agent restored from previous session. Monitoring folder.`;
+      agentInfoText.textContent = infoMsg;
+    } else if (restoreResult.reason === 'permission_required') {
+      agentActivateBtn.style.display = 'none';
+      agentRestoreBtn.style.display = '';
+      agentDeactivateBtn.style.display = 'none';
+      agentClearHistoryBtn.style.display = 'none';
+      updateAgentStatus('inactive', 'AI Agent: Permission needed');
+      agentInfo.style.display = '';
+      agentInfoText.textContent = `ℹ Previously used folder found. Click "Restore Access" to reconnect.`;
+    }
+  })();
+
+  // ══════════════════════════════════════════════════════════════
+  // EXISTING PHOTO SORTING CODE
+  // ══════════════════════════════════════════════════════════════
 
   // ── mode switching ─────────────────────────────────────────
   window.setMode = function (m) {

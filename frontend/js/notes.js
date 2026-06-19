@@ -8,6 +8,7 @@
   let currentMarkdown = '';
   let history         = []; // { url, markdown, meta }
   let useStreaming     = true;
+  let notesAgent = null; // AI Agent instance
 
   // ── DOM refs ─────────────────────────────────────────────────
   const uploadZone     = document.getElementById('upload-zone');
@@ -22,6 +23,312 @@
   const docMeta        = document.getElementById('doc-meta');
   const historyStrip   = document.getElementById('history-strip');
   const scanAgainBtn   = document.getElementById('scan-again-btn');
+
+  // AI Agent DOM refs
+  const agentStatusDot = document.getElementById('agent-status-dot');
+  const agentStatusText = document.getElementById('agent-status-text');
+  const agentActivateBtn = document.getElementById('agent-activate-btn');
+  const agentRestoreBtn = document.getElementById('agent-restore-btn');
+  const agentDeactivateBtn = document.getElementById('agent-deactivate-btn');
+  const agentClearHistoryBtn = document.getElementById('agent-clear-history-btn');
+  const agentInfo = document.getElementById('agent-info');
+  const agentInfoText = document.getElementById('agent-info-text');
+
+  // ══════════════════════════════════════════════════════════════
+  // AI NOTES AGENT (Desktop + Mobile)
+  // ══════════════════════════════════════════════════════════════
+
+  window.activateNotesAgent = async function() {
+    if (!window.DirectoryAgent && !window.MobileAgent) {
+      alert('Agent library not loaded');
+      return;
+    }
+
+    // Check if mobile
+    const isMobile = window.MobileAgent && window.MobileAgent.isMobile();
+
+    if (isMobile) {
+      // Mobile mode
+      try {
+        notesAgent = new window.MobileAgent({
+          id: 'notes-agent-mobile',
+          fileTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
+        });
+
+        notesAgent.on('fileAdded', async (data) => {
+          console.log('📝 New note detected (mobile):', data.name);
+          updateAgentStatus('scanning', `Processing: ${data.name}`);
+          await handleNoteFile(data.file);
+          updateAgentStatus('watching', `Mobile Agent: Ready`);
+        });
+
+        notesAgent.on('statusChange', (data) => {
+          console.log('Mobile agent status:', data);
+          if (data.status === 'activated_mobile') {
+            updateAgentStatus('watching', `Mobile Agent: ${data.mode === 'camera' ? 'Camera Ready' : 'Ready'}`);
+          }
+        });
+
+        // Show mobile options
+        showMobileNotesOptions();
+
+      } catch (err) {
+        console.error('Failed to activate mobile agent:', err);
+        updateAgentStatus('inactive', 'AI Agent: Failed to activate');
+        alert('Failed to activate mobile agent: ' + err.message);
+      }
+    } else {
+      // Desktop mode
+      if (!window.DirectoryAgent.isSupported()) {
+        alert('Automatic folder watching is not supported in this browser. Please use Chrome, Edge, or Opera on desktop.');
+        return;
+      }
+
+      try {
+        notesAgent = new window.DirectoryAgent({
+          id: 'notes-agent',
+          pollInterval: 5000,
+          fileTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/heic']
+        });
+
+        // Set up event listeners
+        notesAgent.on('fileAdded', async (data) => {
+          console.log('📝 New note detected:', data.name);
+          updateAgentStatus('scanning', `Processing: ${data.name}`);
+          await handleNoteFile(data.file);
+          
+          const statsMsg = data.stats 
+            ? `Watching: ${data.path} (${data.stats.totalProcessed} processed, ${data.stats.skippedFiles} skipped)`
+            : `Watching: ${data.path}`;
+          updateAgentStatus('watching', statsMsg);
+        });
+
+        notesAgent.on('scanComplete', (data) => {
+          console.log('📊 Scan complete:', data);
+          if (data.newFiles > 0) {
+            console.log(`✓ Found ${data.newFiles} new files, skipped ${data.skippedFiles} already processed`);
+          }
+        });
+
+        notesAgent.on('statusChange', (data) => {
+          console.log('Agent status:', data);
+          if (data.status === 'activated' || data.status === 'restored' || data.status === 'watching') {
+            const statsMsg = data.processedCount > 0 
+              ? `Watching: ${data.path} (${data.processedCount} files already processed)`
+              : `Watching: ${data.path}`;
+            updateAgentStatus('watching', statsMsg);
+          } else if (data.status === 'history_cleared') {
+            updateAgentStatus('watching', `History cleared for ${data.path}. All files will be re-scanned.`);
+            agentInfoText.textContent = `✓ History cleared. The agent will now process all files in the folder.`;
+          }
+        });
+
+        notesAgent.on('error', (data) => {
+          console.error('Agent error:', data.message);
+          updateAgentStatus('inactive', 'AI Agent: Error - ' + data.message);
+        });
+
+        // Activate
+        const result = await notesAgent.activate();
+        if (result.success) {
+          const statsMsg = result.processedCount > 0
+            ? `Watching: ${result.path} (${result.processedCount} files already processed)`
+            : `Watching: ${result.path}`;
+          updateAgentStatus('watching', statsMsg);
+          agentActivateBtn.style.display = 'none';
+          agentRestoreBtn.style.display = 'none';
+          agentDeactivateBtn.style.display = '';
+          agentClearHistoryBtn.style.display = '';
+          agentInfo.style.display = '';
+          
+          const infoMsg = result.processedCount > 0
+            ? `✓ Agent is monitoring your notes folder. ${result.processedCount} files already processed will be skipped.`
+            : `✓ Agent is monitoring your notes folder. New note images will be automatically scanned.`;
+          agentInfoText.textContent = infoMsg;
+        }
+      } catch (err) {
+        console.error('Failed to activate agent:', err);
+        updateAgentStatus('inactive', 'AI Agent: Failed to activate');
+        if (err.name === 'AbortError') {
+          return;
+        }
+        alert('Failed to activate agent: ' + err.message);
+      }
+    }
+  };
+
+  function showMobileNotesOptions() {
+    // Update UI to show mobile-specific options
+    agentActivateBtn.style.display = 'none';
+    agentRestoreBtn.style.display = 'none';
+    agentDeactivateBtn.style.display = '';
+    agentInfo.style.display = '';
+    agentInfoText.innerHTML = `
+      <p style="margin-bottom: var(--space-2);">📱 Mobile Agent Active - Choose upload method:</p>
+      <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+        <input type="file" id="mobile-notes-folder-input" webkitdirectory directory multiple accept="image/*" style="display: none;" onchange="if(this.files[0]) handleNoteFile(this.files[0])" />
+        <button class="btn btn-sm btn-primary" onclick="document.getElementById('mobile-notes-folder-input').click()">
+          📁 Select Folder
+        </button>
+        <input type="file" id="mobile-notes-camera-input" capture="environment" accept="image/*" style="display: none;" onchange="if(this.files[0]) handleNoteFile(this.files[0])" />
+        <button class="btn btn-sm btn-primary" onclick="document.getElementById('mobile-notes-camera-input').click()">
+          📸 Take Photo of Notes
+        </button>
+        <input type="file" id="mobile-notes-multi-input" accept="image/*" style="display: none;" onchange="if(this.files[0]) handleNoteFile(this.files[0])" />
+        <button class="btn btn-sm btn-ghost" onclick="document.getElementById('mobile-notes-multi-input').click()">
+          🖼️ Select Image
+        </button>
+      </div>
+    `;
+
+    // Set up the mobile agent with the inputs
+    const folderInput = document.getElementById('mobile-notes-folder-input');
+    const cameraInput = document.getElementById('mobile-notes-camera-input');
+
+    if (notesAgent && folderInput) {
+      notesAgent.activateWithFolderPicker(folderInput);
+    }
+    if (notesAgent && cameraInput) {
+      notesAgent.activateWithCamera(cameraInput);
+    }
+
+    updateAgentStatus('watching', 'Mobile Agent: Ready');
+  }
+
+  window.restoreNotesAgent = async function() {
+    if (!notesAgent) return;
+    
+    const savedData = await notesAgent.storage.getDirectory('notes-agent');
+    if (savedData && savedData.handle) {
+      updateAgentStatus('inactive', 'Requesting permission...');
+      const result = await notesAgent.requestPermission(savedData.handle);
+      if (result.success) {
+        agentActivateBtn.style.display = 'none';
+        agentRestoreBtn.style.display = 'none';
+        agentDeactivateBtn.style.display = '';
+        agentClearHistoryBtn.style.display = '';
+        agentInfo.style.display = '';
+        
+        const processedCount = notesAgent.scanStats.totalProcessed;
+        const infoMsg = processedCount > 0
+          ? `✓ Agent restored. Monitoring folder. ${processedCount} files already processed will be skipped.`
+          : `✓ Agent restored. Monitoring folder for new notes.`;
+        agentInfoText.textContent = infoMsg;
+      } else {
+        updateAgentStatus('inactive', 'Permission denied');
+      }
+    }
+  };
+
+  window.deactivateNotesAgent = async function() {
+    if (!notesAgent) return;
+    
+    await notesAgent.deactivate();
+    notesAgent = null;
+    
+    updateAgentStatus('inactive', 'AI Agent: Inactive');
+    agentActivateBtn.style.display = '';
+    agentRestoreBtn.style.display = 'none';
+    agentDeactivateBtn.style.display = 'none';
+    agentClearHistoryBtn.style.display = 'none';
+    agentInfo.style.display = 'none';
+  };
+
+  window.clearNotesAgentHistory = async function() {
+    if (!notesAgent || !notesAgent.folderPath) {
+      alert('No active folder to clear history for');
+      return;
+    }
+
+    if (!confirm(`Clear processing history for "${notesAgent.folderPath}"?\n\nThis will allow the agent to re-scan all files in this folder.`)) {
+      return;
+    }
+
+    try {
+      await notesAgent.clearHistory();
+      alert(`History cleared for "${notesAgent.folderPath}". All files will be re-scanned on next check.`);
+    } catch (err) {
+      alert('Failed to clear history: ' + err.message);
+    }
+  };
+
+  function updateAgentStatus(status, text) {
+    agentStatusText.textContent = text || 'AI Agent: Inactive';
+    agentStatusDot.className = 'agent-status-dot';
+    
+    if (status === 'watching') {
+      agentStatusDot.classList.add('is-active');
+    } else if (status === 'scanning') {
+      agentStatusDot.classList.add('is-scanning');
+    }
+  }
+
+  // Try to restore agent on page load
+  (async function initAgent() {
+    const isMobile = window.MobileAgent && window.MobileAgent.isMobile();
+    
+    if (isMobile) {
+      // Mobile: Always show activate button, no restore needed
+      updateAgentStatus('inactive', 'AI Agent: Tap to activate');
+      agentActivateBtn.textContent = '📱 Activate Mobile Agent';
+      return;
+    }
+
+    if (!window.DirectoryAgent || !window.DirectoryAgent.isSupported()) {
+      return;
+    }
+
+    notesAgent = new window.DirectoryAgent({
+      id: 'notes-agent',
+      pollInterval: 5000
+    });
+
+    notesAgent.on('fileAdded', async (data) => {
+      console.log('📝 New note detected:', data.name);
+      updateAgentStatus('scanning', `Processing: ${data.name}`);
+      await handleNoteFile(data.file);
+      
+      const statsMsg = data.stats 
+        ? `Watching: ${data.path} (${data.stats.totalProcessed} processed, ${data.stats.skippedFiles} skipped)`
+        : `Watching: ${data.path}`;
+      updateAgentStatus('watching', statsMsg);
+    });
+
+    notesAgent.on('statusChange', (data) => {
+      if (data.status === 'watching' || data.status === 'restored') {
+        const statsMsg = data.processedCount > 0
+          ? `Watching: ${data.path} (${data.processedCount} already processed)`
+          : `Watching: ${data.path}`;
+        updateAgentStatus('watching', statsMsg);
+      }
+    });
+
+    const restoreResult = await notesAgent.restore();
+    if (restoreResult.success) {
+      agentActivateBtn.style.display = 'none';
+      agentRestoreBtn.style.display = 'none';
+      agentDeactivateBtn.style.display = '';
+      agentClearHistoryBtn.style.display = '';
+      agentInfo.style.display = '';
+      
+      const infoMsg = restoreResult.processedCount > 0
+        ? `✓ Agent restored from previous session. ${restoreResult.processedCount} files already processed will be skipped.`
+        : `✓ Agent restored from previous session. Monitoring folder.`;
+      agentInfoText.textContent = infoMsg;
+    } else if (restoreResult.reason === 'permission_required') {
+      agentActivateBtn.style.display = 'none';
+      agentRestoreBtn.style.display = '';
+      agentDeactivateBtn.style.display = 'none';
+      agentClearHistoryBtn.style.display = 'none';
+      updateAgentStatus('inactive', 'AI Agent: Permission needed');
+      agentInfo.style.display = '';
+      agentInfoText.textContent = `ℹ Previously used folder found. Click "Restore Access" to reconnect.`;
+    }
+  })();
+
+  // ══════════════════════════════════════════════════════════════
+  // EXISTING NOTES SCANNER CODE
+  // ══════════════════════════════════════════════════════════════
 
   // ── style selector ────────────────────────────────────────────
   window.setStyle = function (btn) {

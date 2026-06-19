@@ -13,6 +13,38 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="./css/styles.css" />
+<style>
+/* Splash screen styles embedded for initial load */
+.splash-overlay { 
+  position: fixed; 
+  inset: 0; 
+  z-index: 9999; 
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.splash-overlay.ready { 
+  opacity: 1;
+  pointer-events: auto;
+}
+.splash-overlay.loaded { 
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+/* Ensure body is visible during and after splash */
+body {
+  background: var(--paper, #F4F5F0) !important;
+  opacity: 1;
+}
+
+/* Prevent splash styles from affecting main content */
+body > *:not(#splash-overlay) {
+  position: relative;
+  z-index: 1;
+}
+</style>
 <!-- Novus.ai (Pendo) Integration -->
 <script>
 (function(apiKey){
@@ -34,6 +66,9 @@ if (window.pendo) {
 </script>
 </head>
 <body>
+
+<!-- Splash Screen Overlay -->
+<div id="splash-overlay" class="splash-overlay"></div>
 
 <div class="topbar">
   <div class="topbar-inner">
@@ -110,6 +145,102 @@ if (window.pendo) {
   </div>
 </footer>
 
+<script>
+// Load splash screen on first visit
+(function() {
+  const splashOverlay = document.getElementById('splash-overlay');
+  
+  // Check if splash has been shown this session
+  if (sessionStorage.getItem('loupe-splash-done')) {
+    splashOverlay.style.display = 'none';
+    return;
+  }
+  
+  // Set a timeout to hide splash if it takes too long to load
+  const fallbackTimeout = setTimeout(() => {
+    splashOverlay.style.display = 'none';
+    sessionStorage.setItem('loupe-splash-done', '1');
+  }, 1000); // Hide after 1 second if not loaded
+  
+  // Load splash.html content into overlay
+  fetch('./splash.html')
+    .then(response => {
+      if (!response.ok) throw new Error('Splash not found');
+      return response.text();
+    })
+    .then(html => {
+      clearTimeout(fallbackTimeout); // Cancel fallback
+      
+      // Extract the body content from splash.html
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const splashContent = doc.getElementById('splash');
+      const splashStyles = doc.querySelector('style');
+      const splashScript = doc.querySelector('script');
+      
+      if (splashContent && splashStyles) {
+        // Insert styles
+        document.head.appendChild(splashStyles.cloneNode(true));
+        
+        // Insert splash content
+        splashOverlay.appendChild(splashContent.cloneNode(true));
+        
+        // Make overlay visible now that content is loaded
+        splashOverlay.classList.add('ready');
+        
+        // Run splash script with modified behavior for overlay
+        if (splashScript) {
+          const splash = document.getElementById('splash');
+          if (!splash) return;
+          
+          const TOTAL = 4200;
+          const EXIT_MS = 720;
+          
+          // Begin exit
+          setTimeout(function() {
+            splash.classList.add('is-out');
+            setTimeout(function() {
+              splashOverlay.classList.add('loaded');
+              sessionStorage.setItem('loupe-splash-done', '1');
+              // Completely remove the overlay after animation
+              setTimeout(function() {
+                splashOverlay.remove();
+              }, 500);
+            }, EXIT_MS);
+          }, TOTAL);
+          
+          // Skip on tap
+          let hasInteracted = false;
+          splash.addEventListener('click', function() {
+            if (hasInteracted) return;
+            hasInteracted = true;
+            setTimeout(function() {
+              splash.classList.add('is-out');
+              setTimeout(function() {
+                splashOverlay.classList.add('loaded');
+                sessionStorage.setItem('loupe-splash-done', '1');
+                // Completely remove the overlay after animation
+                setTimeout(function() {
+                  splashOverlay.remove();
+                }, 500);
+              }, EXIT_MS);
+            }, 200);
+          });
+        }
+      } else {
+        // Content not found, hide overlay
+        splashOverlay.style.display = 'none';
+        sessionStorage.setItem('loupe-splash-done', '1');
+      }
+    })
+    .catch(() => {
+      clearTimeout(fallbackTimeout);
+      // If splash fails to load, just hide overlay immediately
+      splashOverlay.style.display = 'none';
+      sessionStorage.setItem('loupe-splash-done', '1');
+    });
+})();
+</script>
 <script src="./js/app.js"></script>
 </body>
 </html>

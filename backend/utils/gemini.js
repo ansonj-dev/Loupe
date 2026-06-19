@@ -2,7 +2,7 @@
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const MODEL_NAME = 'gemini-1.5-flash';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 function getModel(maxOutputTokens = 1024) {
   const apiKey = process.env.GEMINI_API_KEY;

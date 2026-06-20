@@ -145,6 +145,14 @@
             ? `✓ Agent is monitoring your notes folder. ${result.processedCount} files already processed will be skipped.`
             : `✓ Agent is monitoring your notes folder. New note images will be automatically scanned.`;
           agentInfoText.textContent = infoMsg;
+
+          if (typeof pendo !== 'undefined') {
+            pendo.track('notes_agent_activated', {
+              platform: 'desktop',
+              folderPath: result.path,
+              previouslyProcessedCount: result.processedCount
+            });
+          }
         }
       } catch (err) {
         console.error('Failed to activate agent:', err);
@@ -225,6 +233,12 @@
     
     await notesAgent.deactivate();
     notesAgent = null;
+
+    if (typeof pendo !== 'undefined') {
+      pendo.track('notes_agent_deactivated', {
+        platform: (window.MobileAgent && window.MobileAgent.isMobile()) ? 'mobile' : 'desktop'
+      });
+    }
     
     updateAgentStatus('inactive', 'AI Agent: Inactive');
     agentActivateBtn.style.display = '';
@@ -484,6 +498,15 @@
       : `Scanned ${timeStr} · ${wordCount} words`;
 
     exportStrip.style.display = '';
+
+    if (typeof pendo !== 'undefined') {
+      pendo.track('note_scan_completed', {
+        outputStyle: currentStyle,
+        wordCount: wordCount,
+        processingMs: ms || null,
+        streamingUsed: useStreaming
+      });
+    }
   }
 
   // ── history ────────────────────────────────────────────────────
@@ -534,6 +557,14 @@
       const prev = docMeta.textContent;
       docMeta.textContent = '✓ Copied to clipboard';
       setTimeout(() => { if (docMeta) docMeta.textContent = prev; }, 2000);
+
+      if (typeof pendo !== 'undefined') {
+        pendo.track('note_exported', {
+          exportType: 'copy',
+          wordCount: currentMarkdown.split(/\s+/).filter(Boolean).length,
+          outputStyle: currentStyle
+        });
+      }
     });
   };
 
@@ -544,12 +575,30 @@
     a.href     = URL.createObjectURL(blob);
     a.download = `loupe-notes-${Date.now()}.md`;
     a.click();
+
+    if (typeof pendo !== 'undefined') {
+      pendo.track('note_exported', {
+        exportType: 'download',
+        wordCount: currentMarkdown.split(/\s+/).filter(Boolean).length,
+        outputStyle: currentStyle
+      });
+    }
   };
 
   window.shareDoc = async function () {
     if (!currentMarkdown) return;
     if (navigator.share) {
-      try { await navigator.share({ title: 'Scanned notes — Loupe', text: currentMarkdown }); return; }
+      try {
+        await navigator.share({ title: 'Scanned notes — Loupe', text: currentMarkdown });
+        if (typeof pendo !== 'undefined') {
+          pendo.track('note_exported', {
+            exportType: 'share',
+            wordCount: currentMarkdown.split(/\s+/).filter(Boolean).length,
+            outputStyle: currentStyle
+          });
+        }
+        return;
+      }
       catch (_) { /* fall through */ }
     }
     copyDoc();

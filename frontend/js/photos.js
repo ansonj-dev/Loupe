@@ -2,8 +2,8 @@
 
 (function () {
   // ── config ─────────────────────────────────────────────────
-  const API_BASE    = (window.LOUPE_API_BASE || 'http://localhost:3001').replace(/\/$/, '');
-  const USE_BACKEND = false; // set false to run fully on-device (TEMP: API quota exceeded)
+  const API_BASE    = (window.LOUPE_API_BASE || 'https://loupe-8ln5.onrender.com').replace(/\/$/, '');
+  const USE_BACKEND = true; // set false to run fully on-device (TEMP: API quota exceeded)
 
   // ── state ──────────────────────────────────────────────────
   let photos       = [];

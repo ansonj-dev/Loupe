@@ -2,7 +2,7 @@
 
 (function () {
   // ── config ─────────────────────────────────────────────────
-  const API_BASE = (window.LOUPE_API_BASE || 'http://localhost:3001').replace(/\/$/, '');
+  const API_BASE = (window.LOUPE_API_BASE || 'https://loupe-8ln5.onrender.com').replace(/\/$/, '');
 
   let currentStyle    = 'structured';
   let currentMarkdown = '';
@@ -400,7 +400,7 @@
       docOutput.classList.remove('is-loading');
       docContent.innerHTML = `
         <p style="color:var(--loupe-red);font-family:var(--font-mono);font-size:0.85rem">
-          ⚠ ${err.message || 'Something went wrong. Is the backend running on localhost:3001?'}
+          ⚠ ${err.message || 'Something went wrong. Is the backend running?'}
         </p>`;
       docContent.style.display     = 'block';
       docPlaceholder.style.display = 'none';

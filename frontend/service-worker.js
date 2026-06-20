@@ -1,7 +1,7 @@
 // service-worker.js — cache-first for app shell, network-first for API
 
-const CACHE_NAME   = 'loupe-v3';
-const API_ORIGIN   = 'localhost:3001';
+const CACHE_NAME   = 'loupe-v4';
+const API_ORIGIN   = 'loupe-8ln5.onrender.com';
 
 const SHELL_ASSETS = [
   './',

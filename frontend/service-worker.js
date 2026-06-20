@@ -1,6 +1,6 @@
 // service-worker.js — cache-first for app shell, network-first for API
 
-const CACHE_NAME   = 'loupe-v1';
+const CACHE_NAME   = 'loupe-v3';
 const API_ORIGIN   = 'localhost:3001';
 
 const SHELL_ASSETS = [
@@ -15,6 +15,12 @@ const SHELL_ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './images/001.png',
+  './images/002.png',
+  './images/003.png',
+  './images/004.png',
+  './images/005.png',
+  './images/006.png',
 ];
 
 // ── Install: pre-cache app shell ──────────────────────────────

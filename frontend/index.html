@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<script>
+  if (!sessionStorage.getItem('loupe-splash-done')) {
+    document.documentElement.classList.add('splash-pending');
+  }
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Loupe — circle the keeper</title>
 <meta name="description" content="Loupe scans your camera roll for the sharpest, least-blurry, least-repeated shot — and turns photographed notes into a clean document." />
@@ -43,6 +48,13 @@ body {
 body > *:not(#splash-overlay) {
   position: relative;
   z-index: 1;
+  transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+/* Hide main content while splash is pending */
+.splash-pending body > *:not(#splash-overlay) {
+  visibility: hidden;
+  opacity: 0;
 }
 </style>
 <!-- Novus.ai (Pendo) Integration -->
@@ -102,17 +114,33 @@ if (window.pendo) {
 
     <div class="light-table" aria-hidden="true">
       <div class="light-table-grid">
-        <div class="frame"><span class="frame-number">001</span></div>
+        <div class="frame">
+          <img src="./images/001.png" alt="blurry cat">
+          <span class="frame-number">001</span>
+        </div>
         <div class="frame is-keeper">
+          <img src="./images/002.png" alt="sharp cat keeper">
           <span class="frame-number">002</span>
           <svg class="circle-mark" viewBox="0 0 100 100" preserveAspectRatio="none">
             <path d="M 50 8 A 42 42 0 1 1 49.9 8" />
           </svg>
         </div>
-        <div class="frame"><span class="frame-number">003</span></div>
-        <div class="frame"><span class="frame-number">004</span></div>
-        <div class="frame"><span class="frame-number">005</span></div>
-        <div class="frame"><span class="frame-number">006</span></div>
+        <div class="frame">
+          <img src="./images/003.png" alt="darker cat">
+          <span class="frame-number">003</span>
+        </div>
+        <div class="frame">
+          <img src="./images/004.png" alt="faded cat">
+          <span class="frame-number">004</span>
+        </div>
+        <div class="frame">
+          <img src="./images/005.png" alt="bokeh cat">
+          <span class="frame-number">005</span>
+        </div>
+        <div class="frame">
+          <img src="./images/006.png" alt="grainy cat">
+          <span class="frame-number">006</span>
+        </div>
       </div>
     </div>
   </section>
@@ -160,6 +188,7 @@ if (window.pendo) {
   const fallbackTimeout = setTimeout(() => {
     splashOverlay.style.display = 'none';
     sessionStorage.setItem('loupe-splash-done', '1');
+    document.documentElement.classList.remove('splash-pending');
   }, 1000); // Hide after 1 second if not loaded
   
   // Load splash.html content into overlay
@@ -199,6 +228,7 @@ if (window.pendo) {
           // Begin exit
           setTimeout(function() {
             splash.classList.add('is-out');
+            document.documentElement.classList.remove('splash-pending');
             setTimeout(function() {
               splashOverlay.classList.add('loaded');
               sessionStorage.setItem('loupe-splash-done', '1');
@@ -216,6 +246,7 @@ if (window.pendo) {
             hasInteracted = true;
             setTimeout(function() {
               splash.classList.add('is-out');
+              document.documentElement.classList.remove('splash-pending');
               setTimeout(function() {
                 splashOverlay.classList.add('loaded');
                 sessionStorage.setItem('loupe-splash-done', '1');
@@ -231,6 +262,7 @@ if (window.pendo) {
         // Content not found, hide overlay
         splashOverlay.style.display = 'none';
         sessionStorage.setItem('loupe-splash-done', '1');
+        document.documentElement.classList.remove('splash-pending');
       }
     })
     .catch(() => {
@@ -238,6 +270,7 @@ if (window.pendo) {
       // If splash fails to load, just hide overlay immediately
       splashOverlay.style.display = 'none';
       sessionStorage.setItem('loupe-splash-done', '1');
+      document.documentElement.classList.remove('splash-pending');
     });
 })();
 </script>

@@ -304,6 +304,14 @@ button {
   aspect-ratio: 4/5;
   background: linear-gradient(135deg, #e7e8e2, #d8dad2);
   border: 1px solid var(--ink);
+  overflow: hidden;
+}
+
+.frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .frame .frame-number {
@@ -313,6 +321,7 @@ button {
   font-family: var(--font-mono);
   font-size: 0.58rem;
   color: rgba(21,23,27,0.55);
+  z-index: 2;
 }
 
 .frame.is-keeper { z-index: 2; }

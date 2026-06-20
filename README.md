@@ -175,17 +175,7 @@ The AI Agent includes intelligent persistent tracking to prevent re-scanning:
 Day 1: Process 25 photos (15 seconds)
 Day 2: Add 2 new photos → Process only 2 (1 second)
 Day 3: No new photos → Skip all 27 (<1 second)
-```
-
-## 🌐 Browser Support
-
-| Feature | Chrome | Edge | Safari | Firefox | Mobile |
-|---------|--------|------|--------|---------|--------|
-| Photo Sort | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Notes Scan | ✅ | ✅ | ✅ | ✅ | ✅ |
-| AI Agent (Desktop) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| AI Agent (Mobile) | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| PWA Install | ✅ | ✅ | ✅ | ✅ | ✅ |
+``
 
 **Legend:**
 - ✅ Full support

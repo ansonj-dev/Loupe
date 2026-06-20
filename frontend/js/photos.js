@@ -106,6 +106,16 @@
           // Show statistics after processing
           const statsMsg = `Watching: ${data.path} (${data.stats.totalProcessed} processed, ${data.stats.skippedFiles} skipped)`;
           updateAgentStatus('watching', statsMsg);
+
+          if (typeof pendo !== 'undefined') {
+            pendo.track('agent_file_auto_processed', {
+              agentType: 'gallery',
+              fileName: data.name,
+              folderPath: data.path,
+              totalProcessed: data.stats.totalProcessed,
+              skippedFiles: data.stats.skippedFiles
+            });
+          }
         });
 
         galleryAgent.on('scanComplete', (data) => {
@@ -150,6 +160,14 @@
             ? `✓ Agent is monitoring your gallery folder. ${result.processedCount} files already processed will be skipped.`
             : `✓ Agent is monitoring your gallery folder. New photos will be automatically processed.`;
           agentInfoText.textContent = infoMsg;
+
+          if (typeof pendo !== 'undefined') {
+            pendo.track('gallery_agent_activated', {
+              platform: 'desktop',
+              folderPath: result.path,
+              previouslyProcessedCount: result.processedCount
+            });
+          }
         }
       } catch (err) {
         console.error('Failed to activate agent:', err);
@@ -232,6 +250,12 @@
     
     await galleryAgent.deactivate();
     galleryAgent = null;
+
+    if (typeof pendo !== 'undefined') {
+      pendo.track('gallery_agent_deactivated', {
+        platform: (window.MobileAgent && window.MobileAgent.isMobile()) ? 'mobile' : 'desktop'
+      });
+    }
     
     updateAgentStatus('inactive', 'AI Agent: Inactive');
     agentActivateBtn.style.display = '';
@@ -253,6 +277,14 @@
 
     try {
       await galleryAgent.clearHistory();
+
+      if (typeof pendo !== 'undefined') {
+        pendo.track('agent_history_cleared', {
+          agentType: 'gallery',
+          folderPath: galleryAgent.folderPath
+        });
+      }
+
       alert(`History cleared for "${galleryAgent.folderPath}". All files will be re-scanned on next check.`);
     } catch (err) {
       alert('Failed to clear history: ' + err.message);
@@ -322,6 +354,14 @@
         ? `✓ Agent restored from previous session. ${restoreResult.processedCount} files already processed will be skipped.`
         : `✓ Agent restored from previous session. Monitoring folder.`;
       agentInfoText.textContent = infoMsg;
+
+      if (typeof pendo !== 'undefined') {
+        pendo.track('agent_session_restored', {
+          agentType: 'gallery',
+          folderPath: galleryAgent.folderPath || '',
+          previouslyProcessedCount: restoreResult.processedCount || 0
+        });
+      }
     } else if (restoreResult.reason === 'permission_required') {
       agentActivateBtn.style.display = 'none';
       agentRestoreBtn.style.display = '';
@@ -544,6 +584,18 @@
 
     photos.push(...loaded);
 
+    if (typeof pendo !== 'undefined') {
+      pendo.track('photos_batch_processed', {
+        photoCount: loaded.length,
+        keeperCount: loaded.filter(p => p.keeper).length,
+        blurryCount: loaded.filter(p => p.score < 45).length,
+        clusterCount: [...new Set(loaded.map(p => p.cluster).filter(c => c !== null))].length,
+        processingMode: mode,
+        useBackendAI: USE_BACKEND,
+        avgScore: loaded.length ? Math.round(loaded.reduce((s, p) => s + (p.score || 0), 0) / loaded.length) : 0
+      });
+    }
+
     setTimeout(() => {
       scanProgress.classList.remove('is-active');
       scanProgressBar.style.width = '0%';
@@ -664,6 +716,13 @@
         const files = keepers.map(p => p.file);
         if (navigator.canShare({ files })) {
           await navigator.share({ files, title: 'My best shots — Loupe' });
+          if (typeof pendo !== 'undefined') {
+            pendo.track('keepers_exported', {
+              keeperCount: keepers.length,
+              exportAction: 'share',
+              shareApiUsed: true
+            });
+          }
           return;
         }
       } catch (_) { /* fall through */ }
@@ -672,6 +731,13 @@
       const a = document.createElement('a');
       a.href = p.url; a.download = `loupe-keeper-${i + 1}.jpg`; a.click();
     });
+    if (typeof pendo !== 'undefined') {
+      pendo.track('keepers_exported', {
+        keeperCount: keepers.length,
+        exportAction: action || 'download',
+        shareApiUsed: false
+      });
+    }
   };
 
 })();

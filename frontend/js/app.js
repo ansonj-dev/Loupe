@@ -37,9 +37,16 @@
     installBtn.addEventListener('click', async () => {
       if (!deferredInstall) return;
       deferredInstall.prompt();
-      await deferredInstall.userChoice;
+      const { outcome } = await deferredInstall.userChoice;
       deferredInstall = null;
       banner.classList.remove('is-visible');
+
+      if (typeof pendo !== 'undefined') {
+        pendo.track('pwa_install_accepted', {
+          installOutcome: outcome,
+          page: window.location.pathname
+        });
+      }
     });
   }
 
